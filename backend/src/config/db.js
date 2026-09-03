@@ -7,11 +7,19 @@ import { inMemoryStore } from "../utils/inMemoryStore.js";
 dotenv.config();
 
 export let isDbConnected = false;
+let isDataInitialized = false;
+
+// Global cache for Serverless environments (Vercel / AWS Lambda)
+let cached = global.mongoose;
+if (!cached) {
+  cached = global.mongoose = { conn: null, promise: null };
+}
 
 /**
  * Initialize default Admin and seed data if database is empty
  */
 const initDefaultDatabaseData = async () => {
+  if (isDataInitialized) return;
   try {
     // 1. Ensure default Admin user exists: adideva@gmail.com / 12345678
     const adminEmail = "adideva@gmail.com";
@@ -52,42 +60,68 @@ const initDefaultDatabaseData = async () => {
       await Package.insertMany(inMemoryStore.packages);
       console.log(`✅ Seeded ${inMemoryStore.packages.length} luxury tour packages to Atlas database.`);
     }
+
+    isDataInitialized = true;
   } catch (err) {
     console.warn("DB auto-init notice:", err.message);
   }
 };
 
 /**
- * Connect to MongoDB database via Mongoose with graceful fallback
+ * Connect to MongoDB database via Mongoose with global serverless caching and graceful fallback
  */
 const connectDB = async () => {
-  const mongoUri =
-    process.env.MONGODB_URI ||
-    process.env.MONGO_URI ||
-    "mongodb+srv://wr3dman:Sunny123@cluster.l9sawiy.mongodb.net/bookmyindia?retryWrites=true&w=majority&appName=cluster";
+  if (cached.conn && mongoose.connection.readyState === 1) {
+    isDbConnected = true;
+    return cached.conn;
+  }
+
+  if (!cached.promise) {
+    const mongoUri =
+      process.env.MONGODB_URI ||
+      process.env.MONGO_URI ||
+      "mongodb+srv://wr3dman:Sunny123@cluster.l9sawiy.mongodb.net/bookmyindia?retryWrites=true&w=majority&appName=cluster";
+
+    const opts = {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 10000,
+      bufferCommands: false,
+    };
+
+    cached.promise = mongoose
+      .connect(mongoUri, opts)
+      .then(async (mongooseInstance) => {
+        isDbConnected = true;
+        console.log(`\n✅ MongoDB Atlas connected successfully! DB HOST: ${mongooseInstance.connection.host}`);
+        // Asynchronously initialize default data without blocking response
+        initDefaultDatabaseData().catch((e) => {
+          console.warn("Async init warning:", e.message);
+        });
+        return mongooseInstance;
+      })
+      .catch((error) => {
+        cached.promise = null;
+        isDbConnected = false;
+        console.warn(
+          "⚠️ MongoDB Atlas connection notice:",
+          error.message,
+          "— operating in resilient fallback mode with live memory sync."
+        );
+        return null;
+      });
+  }
 
   try {
-    const connectionInstance = await mongoose.connect(mongoUri, {
-      serverSelectionTimeoutMS: 8000,
-    });
-    isDbConnected = true;
-    console.log(
-      `\n✅ MongoDB Atlas connected successfully! DB HOST: ${connectionInstance.connection.host}`
-    );
-
-    // Initialize admin user and seed data
-    await initDefaultDatabaseData();
-
-    return true;
-  } catch (error) {
+    cached.conn = await cached.promise;
+    if (cached.conn && mongoose.connection.readyState === 1) {
+      isDbConnected = true;
+    }
+  } catch (e) {
+    cached.promise = null;
     isDbConnected = false;
-    console.warn(
-      "⚠️ MongoDB Atlas connection notice:",
-      error.message,
-      "— operating in resilient fallback mode with live memory sync."
-    );
-    return false;
   }
+
+  return cached.conn;
 };
 
 export default connectDB;

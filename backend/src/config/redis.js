@@ -3,57 +3,63 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+const rawRedisUrl = process.env.REDIS_URL ? process.env.REDIS_URL.trim() : "";
+// Only enable Redis if explicitly configured with an external URI (e.g. Upstash, Redis Cloud, Rediss)
+const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.NODE_ENV === "production");
+const shouldEnableRedis =
+  rawRedisUrl &&
+  (rawRedisUrl.startsWith("redis://") || rawRedisUrl.startsWith("rediss://")) &&
+  !(isServerless && (rawRedisUrl.includes("localhost") || rawRedisUrl.includes("127.0.0.1")));
+
 let isRedisConnected = false;
+let redis = null;
 
-// Initialize Redis Client with lazy connect and reconnection limits
-const redis = new Redis(redisUrl, {
-  maxRetriesPerRequest: 1,
-  retryStrategy(times) {
-    if (times > 3) {
-      // Stop retrying after 3 attempts in local dev to prevent log spam
-      return null;
-    }
-    return Math.min(times * 100, 2000);
-  },
-  lazyConnect: true,
-  enableOfflineQueue: false,
-});
-
-redis.on("connect", () => {
-  isRedisConnected = true;
-  console.log(" Redis connected successfully");
-});
-
-redis.on("ready", () => {
-  isRedisConnected = true;
-  console.log(" Redis is ready to accept commands");
-});
-
-redis.on("error", (err) => {
-  isRedisConnected = false;
-  // Log once gracefully without throwing fatal exception
-  if (err.code === "ECONNREFUSED") {
-    // Suppress repeated ECONNREFUSED in development
-  } else {
-    console.warn(" Redis client error:", err.message);
-  }
-});
-
-redis.on("close", () => {
-  isRedisConnected = false;
-});
-
-// Attempt initial connection safely
-const connectRedis = async () => {
+if (shouldEnableRedis) {
   try {
-    await redis.connect();
-  } catch (err) {
-    console.warn(" Redis connection not available (running in memory/direct DB mode)");
-  }
-};
+    redis = new Redis(rawRedisUrl, {
+      maxRetriesPerRequest: 1,
+      connectTimeout: 3000,
+      showFriendlyErrorStack: false,
+      retryStrategy(times) {
+        // In serverless / cloud, do not loop reconnecting if host is unreachable
+        return null;
+      },
+      lazyConnect: true,
+      enableOfflineQueue: false,
+    });
 
-connectRedis();
+    redis.on("connect", () => {
+      isRedisConnected = true;
+      console.log("✅ Redis connected successfully");
+    });
+
+    redis.on("ready", () => {
+      isRedisConnected = true;
+    });
+
+    let hasLoggedError = false;
+    redis.on("error", (err) => {
+      isRedisConnected = false;
+      if (!hasLoggedError) {
+        hasLoggedError = true;
+        console.warn("⚠️ Redis client notice:", err.message || "Connection refused");
+      }
+    });
+
+    redis.on("close", () => {
+      isRedisConnected = false;
+    });
+
+    // Safely attempt initial connection in background
+    redis.connect().catch(() => {
+      isRedisConnected = false;
+    });
+  } catch (e) {
+    console.warn("Redis initialization skipped:", e.message);
+    redis = null;
+    isRedisConnected = false;
+  }
+}
 
 /**
  * Safe Redis Cache Get Helper with in-memory fallback
@@ -62,11 +68,10 @@ connectRedis();
  */
 export const getCache = async (key) => {
   try {
-    if (!isRedisConnected) return null;
+    if (!isRedisConnected || !redis) return null;
     const data = await redis.get(key);
     return data ? JSON.parse(data) : null;
   } catch (error) {
-    console.warn(`Redis getCache error for key ${key}:`, error.message);
     return null;
   }
 };
@@ -79,7 +84,7 @@ export const getCache = async (key) => {
  */
 export const setCache = async (key, value, ttlSeconds = 3600) => {
   try {
-    if (!isRedisConnected) return false;
+    if (!isRedisConnected || !redis) return false;
     const serialized = JSON.stringify(value);
     if (ttlSeconds > 0) {
       await redis.set(key, serialized, "EX", ttlSeconds);
@@ -88,7 +93,6 @@ export const setCache = async (key, value, ttlSeconds = 3600) => {
     }
     return true;
   } catch (error) {
-    console.warn(`Redis setCache error for key ${key}:`, error.message);
     return false;
   }
 };
@@ -99,11 +103,10 @@ export const setCache = async (key, value, ttlSeconds = 3600) => {
  */
 export const deleteCache = async (key) => {
   try {
-    if (!isRedisConnected) return false;
+    if (!isRedisConnected || !redis) return false;
     await redis.del(key);
     return true;
   } catch (error) {
-    console.warn(`Redis deleteCache error for key ${key}:`, error.message);
     return false;
   }
 };
@@ -114,14 +117,13 @@ export const deleteCache = async (key) => {
  */
 export const deleteCachePattern = async (pattern) => {
   try {
-    if (!isRedisConnected) return false;
+    if (!isRedisConnected || !redis) return false;
     const keys = await redis.keys(pattern);
     if (keys && keys.length > 0) {
       await redis.del(...keys);
     }
     return true;
   } catch (error) {
-    console.warn(`Redis deleteCachePattern error for pattern ${pattern}:`, error.message);
     return false;
   }
 };

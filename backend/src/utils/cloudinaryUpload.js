@@ -29,15 +29,19 @@ export const uploadOnCloudinary = async (localFilePath, folder = "bookmyindia") 
       resource_type: "auto",
     });
 
-    // Remove local temp file after upload
-    if (fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
+    // Remove local temp file after upload safely
+    if (localFilePath && fs.existsSync(localFilePath)) {
+      try {
+        fs.unlinkSync(localFilePath);
+      } catch (e) {}
     }
 
     return response;
   } catch (error) {
     if (localFilePath && fs.existsSync(localFilePath)) {
-      fs.unlinkSync(localFilePath);
+      try {
+        fs.unlinkSync(localFilePath);
+      } catch (e) {}
     }
     console.error("Cloudinary upload error:", error);
     return null;

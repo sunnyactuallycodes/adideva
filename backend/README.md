@@ -137,3 +137,21 @@ npm run dev
 | GET | `/api/v1/users/admin/stats` | Aggregate dashboard KPI analytics | Admin |
 | GET | `/api/v1/users` | List all registered users | Admin |
 | PATCH | `/api/v1/users/:id/status` | Toggle user status `active`/`inactive` | Admin |
+
+---
+
+## ⚡ Vercel Serverless Deployment
+
+This backend is fully optimized for **Vercel Serverless Functions**:
+
+1. **Root Directory on Vercel**: Set Root Directory to `backend` in your Vercel project settings.
+2. **Entrypoint**: `api/index.js` automatically maps all incoming traffic via `vercel.json` rewrites.
+3. **Environment Variables**: In Vercel Project Settings -> Environment Variables, add:
+   - `MONGODB_URI`: Your MongoDB Atlas connection URI
+   - `JWT_SECRET`: Random secret string (e.g. `bookmyindia_super_secure_jwt_secret_key_2026_luxury_travel`)
+   - `CLIENT_URL`: Your Vercel frontend URL (e.g. `https://your-frontend.vercel.app`)
+   - `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`
+   - `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`
+   - *(Optional)* `REDIS_URL`: Upstash or Redis Cloud URL (if omitted, seamlessly runs in resilient direct DB mode without cold start delays).
+4. **Health Check**: Test your deployment by visiting `https://your-backend.vercel.app/api/v1/health` or `https://your-backend.vercel.app/`.
+

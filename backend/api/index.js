@@ -1,18 +1,9 @@
 import app from "../src/app.js";
-import connectDB, { isDbConnected } from "../src/config/db.js";
+import connectDB from "../src/config/db.js";
 
-let dbPromise = null;
+// Ensure DB connection is initiated on serverless cold start
+connectDB().catch((err) => {
+  console.warn("Serverless DB connection init notice:", err.message);
+});
 
-export default async function handler(req, res) {
-  if (!isDbConnected) {
-    if (!dbPromise) {
-      dbPromise = connectDB().catch((err) => {
-        console.warn("Serverless DB connection notice:", err.message);
-        dbPromise = null;
-      });
-    }
-    await dbPromise;
-  }
-
-  return app(req, res);
-}
+export default app;

@@ -3,20 +3,34 @@ import path from "path";
 import fs from "fs";
 import { ApiError } from "../utils/apiError.js";
 
-// Ensure temp upload directory exists for disk storage fallback
-const tempDir = path.resolve("./public/temp");
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
+import os from "os";
+
+// Ensure temp upload directory exists in writable OS temp folder (compatible with Vercel Serverless / AWS Lambda)
+const tempDir = path.join(os.tmpdir(), "bmi_uploads");
+try {
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+} catch (e) {
+  // If filesystem creation fails, storage fallback is preserved
+  console.warn("Notice: Temp upload directory creation skipped or using memory storage:", e.message);
 }
 
-// Disk storage for file uploads
+// Disk storage for file uploads (pointing to /tmp on serverless)
 const diskStorage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, tempDir);
+    try {
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+      cb(null, tempDir);
+    } catch (err) {
+      cb(null, os.tmpdir());
+    }
   },
   filename: function (req, file, cb) {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname || "image.jpg");
     cb(null, `${file.fieldname}-${uniqueSuffix}${ext}`);
   },
 });

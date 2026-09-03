@@ -2,9 +2,43 @@
  * API Client Service for BookMyIndia Backend
  */
 
-const API_BASE_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
-  "http://localhost:5001/api/v1";
+/**
+ * Normalizes backend API URL to guarantee correct route resolution on local and production Vercel environments.
+ */
+export function resolveApiBaseUrl(): string {
+  let envUrl = "";
+  try {
+    if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) {
+      envUrl = String(import.meta.env.VITE_API_URL).trim();
+    }
+  } catch {}
+
+  // If envUrl is empty, points to broken deployment, or is missing, use live production backend
+  if (!envUrl || envUrl.includes("adideva-package.vercel.app")) {
+    envUrl = "https://adideva.vercel.app/api/v1";
+  }
+
+  // Remove trailing slashes
+  let cleanUrl = envUrl.replace(/\/+$/, "");
+
+  // Prepend protocol if missing
+  if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+    cleanUrl = `https://${cleanUrl}`;
+  }
+
+  // Automatically append /api/v1 if not present
+  if (!cleanUrl.endsWith("/api/v1")) {
+    if (cleanUrl.endsWith("/api")) {
+      cleanUrl = `${cleanUrl}/v1`;
+    } else {
+      cleanUrl = `${cleanUrl}/api/v1`;
+    }
+  }
+
+  return cleanUrl;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 const TOKEN_KEY = "bmi_access_token";
 const USER_KEY = "bmi_user";
@@ -66,7 +100,8 @@ async function request<T = any>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const url = `${API_BASE_URL}${endpoint}`;
+  const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  const url = `${API_BASE_URL}${cleanEndpoint}`;
 
   try {
     const response = await fetch(url, {

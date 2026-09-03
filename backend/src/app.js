@@ -66,14 +66,15 @@ try {
   // Ignore in serverless
 }
 
-// Root Landing Route
-app.get("/", (req, res) => {
+// Healthcheck & Diagnostic Routes
+const healthcheckHandler = (req, res) => {
   return res.status(200).json({
     status: "ok",
     service: "BookMyIndia Backend API",
     version: "1.0.0",
     environment: process.env.NODE_ENV || "production",
     database: mongoose.connection.readyState === 1 || isDbConnected ? "connected" : "fallback_mode",
+    timestamp: new Date().toISOString(),
     endpoints: {
       health: "/api/v1/health",
       packages: "/api/v1/packages",
@@ -82,33 +83,32 @@ app.get("/", (req, res) => {
       users: "/api/v1/users",
     },
   });
-});
+};
 
-// API Base Route
-app.get("/api", (req, res) => {
-  return res.status(200).json({
-    status: "ok",
-    message: "BookMyIndia API Gateway",
-    version: "1.0.0",
-    docs: "/api/v1/health",
-  });
-});
+app.get("/", healthcheckHandler);
+app.get("/health", healthcheckHandler);
+app.get("/api", healthcheckHandler);
+app.get("/api/health", healthcheckHandler);
+app.get("/api/v1", healthcheckHandler);
+app.get("/api/v1/health", healthcheckHandler);
 
-// Healthcheck Route
-app.get("/api/v1/health", (req, res) => {
-  return res.status(200).json({
-    status: "ok",
-    message: "BookMyIndia API is healthy and operational",
-    database: mongoose.connection.readyState === 1 || isDbConnected ? "connected" : "fallback_mode",
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// Mount module routes
+// 1. Primary API routes (/api/v1/*)
 app.use("/api/v1/auth", authRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/packages", packageRouter);
 app.use("/api/v1/orders", orderRouter);
+
+// 2. Secondary API routes (/api/*) for backwards compatibility
+app.use("/api/auth", authRouter);
+app.use("/api/users", userRouter);
+app.use("/api/packages", packageRouter);
+app.use("/api/orders", orderRouter);
+
+// 3. Direct root aliases (/*) to prevent 404s if baseUrl lacks /api/v1 prefix
+app.use("/auth", authRouter);
+app.use("/users", userRouter);
+app.use("/packages", packageRouter);
+app.use("/orders", orderRouter);
 
 // 404 Route Handler
 app.use(notFoundHandler);

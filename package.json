@@ -1,6 +1,7 @@
 {
   "name": "bookmyindia-root",
   "version": "1.0.0",
+  "type": "module",
   "private": true,
   "scripts": {
     "build": "node build.js",

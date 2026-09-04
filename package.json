@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "build": "node -e \"const fs = require('fs'), { execSync } = require('child_process'); if (fs.existsSync('./frontend/package.json')) { execSync('npm run build --prefix frontend && rm -rf dist && cp -r frontend/dist ./dist', { stdio: 'inherit' }); } else { execSync('npx vite build', { stdio: 'inherit' }); }\"",
+    "build": "node build.js",
     "dev": "npm run dev --prefix frontend"
   }
 }

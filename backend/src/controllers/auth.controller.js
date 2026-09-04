@@ -310,7 +310,7 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
     user = inMemoryStore.users[0];
   }
 
-  const { passwordHash: _, ...safeUser } = user;
+  const { passwordHash: _, ...safeUser } = user._doc || user;
 
   return res.status(200).json(
     new ApiResponse(200, { user: safeUser }, "Current user profile retrieved")

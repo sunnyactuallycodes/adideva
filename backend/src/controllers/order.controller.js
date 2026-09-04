@@ -258,7 +258,6 @@ export const verifyAndCreateOrder = asyncHandler(async (req, res) => {
   const generatedId = orderId || generateOrderId();
 
   const orderPayload = {
-    _id: `ord_${Date.now()}`,
     orderId: generatedId,
     packageId: pkg?.id || Number(packageId) || 1,
     packageTitle: pkg?.title || "Royal India Holiday",

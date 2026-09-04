@@ -1,6 +1,6 @@
 {
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/dist",
+  "buildCommand": "npm run build --prefix frontend && rm -rf dist && cp -r frontend/dist ./dist",
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/(.*)",
